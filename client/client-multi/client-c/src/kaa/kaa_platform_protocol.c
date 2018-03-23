@@ -33,6 +33,8 @@
 
 #include <kaa_extension.h>
 
+#include "kaa_profile_private.h"
+
 /** Resync flag indicating that profile manager should be resynced */
 #define KAA_PROFILE_RESYNC_FLAG     0x1
 
@@ -67,7 +69,7 @@ kaa_error_t kaa_meta_data_request_serialize(kaa_platform_protocol_t *self,
 
     KAA_LOG_TRACE(self->logger, KAA_ERR_NONE, "Going to serialize client meta sync");
 
-    uint16_t options = TIMEOUT_VALUE | PUBLIC_KEY_HASH_VALUE | PROFILE_HASH_VALUE | APP_TOKEN_VALUE;
+    const uint16_t options = TIMEOUT_VALUE | PUBLIC_KEY_HASH_VALUE | PROFILE_HASH_VALUE | APP_TOKEN_VALUE;
 
     const size_t payload_length = kaa_meta_data_request_size - KAA_EXTENSION_HEADER_SIZE;
 
@@ -254,6 +256,8 @@ kaa_error_t kaa_platform_protocol_serialize_client_sync(kaa_platform_protocol_t 
     return KAA_ERR_NONE;
 }
 
+// TODO(KAA-1089): Remove weak linkage
+__attribute__((weak))
 kaa_error_t kaa_platform_protocol_process_server_sync(kaa_platform_protocol_t *self,
         const uint8_t *buffer, size_t buffer_size)
 {
@@ -381,6 +385,8 @@ fail:
     return error_code;
 }
 
+// TODO(KAA-1089): Remove weak linkage
+__attribute__((weak))
 kaa_error_t kaa_platform_protocol_alloc_serialize_client_sync(kaa_platform_protocol_t *self,
         const kaa_extension_id *services, size_t services_count,
         uint8_t **buffer, size_t *buffer_size)

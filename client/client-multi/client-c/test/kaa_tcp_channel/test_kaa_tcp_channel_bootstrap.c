@@ -27,7 +27,7 @@
 #include <netdb.h>
 #include <string.h>
 
-#include "../kaa_test.h"
+#include "kaa_test.h"
 
 #include "kaa_common.h"
 #include "kaa_error.h"
@@ -37,6 +37,10 @@
 #include "platform/ext_tcp_utils.h"
 #include "platform-impl/common/kaa_tcp_channel.h"
 #include "kaa_protocols/kaa_tcp/kaatcp_request.h"
+#include "platform/ext_key_utils.h"
+#include "platform/ext_encryption_utils.h"
+
+#include <kaa_bootstrap_manager.h>
 
 #define ACCESS_POINT_SOCKET_FD 5
 
@@ -83,9 +87,11 @@ static uint8_t DISCONNECT_MESSAGE[] = {0xE0, 0x02, 0x00, 0x00};
 static uint8_t CONNECT_HEAD[] = {0x35, 0x46};
 static uint8_t CONNECT_PACK[] = {0x34, 0x45};
 
-static uint8_t DESTINATION_SOCKADDR[]   = {
-    0x02, 0x00, 0x26, 0xa0, 0xc0, 0xa8, 0x4d, 0x02,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+static kaa_sockaddr_t DESTINATION_SOCKADDR = {
+    .sa_family = 0x02,
+    .sa_data = { 0x26, (uint8_t)0xa0, (uint8_t)0xc0, (uint8_t)0xa8, 0x4d, 0x02,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+    }
 };
 
 static uint8_t CONNECTION_DATA[]   = {
@@ -154,8 +160,8 @@ void test_create_kaa_tcp_channel(void **state)
     (void)state;
     kaa_error_t error_code;
 
-    kaa_transport_channel_interface_t *channel = NULL;
-    channel = KAA_CALLOC(1,sizeof(kaa_transport_channel_interface_t));
+    kaa_transport_channel_interface_t *channel =
+        KAA_CALLOC(1, sizeof(kaa_transport_channel_interface_t));
 
     kaa_extension_id bootstrap_services[] = {KAA_EXTENSION_BOOTSTRAP};
 
@@ -204,8 +210,8 @@ void test_set_access_point_full_success_bootstrap(void **state)
 
     kaa_error_t error_code;
 
-    kaa_transport_channel_interface_t *channel = NULL;
-    channel = KAA_CALLOC(1,sizeof(kaa_transport_channel_interface_t));
+    kaa_transport_channel_interface_t *channel =
+        KAA_CALLOC(1, sizeof(kaa_transport_channel_interface_t));
 
     kaa_extension_id bootstrap_services[] = {KAA_EXTENSION_BOOTSTRAP};
 
@@ -232,8 +238,8 @@ void test_set_access_point_connecting_error(void **state)
 
     kaa_error_t error_code;
 
-    kaa_transport_channel_interface_t *channel = NULL;
-    channel = KAA_CALLOC(1,sizeof(kaa_transport_channel_interface_t));
+    kaa_transport_channel_interface_t *channel =
+        KAA_CALLOC(1, sizeof(kaa_transport_channel_interface_t));
 
     kaa_extension_id bootstrap_services[] = {KAA_EXTENSION_BOOTSTRAP};
 
@@ -274,8 +280,8 @@ void test_set_access_point_io_error(void **state)
 
     kaa_error_t error_code;
 
-    kaa_transport_channel_interface_t *channel = NULL;
-    channel = KAA_CALLOC(1,sizeof(kaa_transport_channel_interface_t));
+    kaa_transport_channel_interface_t *channel =
+        KAA_CALLOC(1, sizeof(kaa_transport_channel_interface_t));
 
     kaa_extension_id bootstrap_services[] = {KAA_EXTENSION_BOOTSTRAP};
 
@@ -341,8 +347,8 @@ void test_bootstrap_sync_success(void **state)
 
     kaa_error_t error_code;
 
-    kaa_transport_channel_interface_t *channel = NULL;
-    channel = KAA_CALLOC(1,sizeof(kaa_transport_channel_interface_t));
+    kaa_transport_channel_interface_t *channel =
+        KAA_CALLOC(1, sizeof(kaa_transport_channel_interface_t));
 
     kaa_extension_id bootstrap_services[] = {KAA_EXTENSION_BOOTSTRAP};
 
@@ -621,7 +627,7 @@ kaatcp_error_t kaatcp_get_request_connect(const kaatcp_connect_t *message
     if (message->protocol_version != PROTOCOL_VERSION) {
         return KAATCP_ERR_BAD_PARAM;
     }
-    if (message->next_ptorocol_id != 0x3553c66f) {
+    if (message->next_ptorocol_id != 0x0231ad61) {
         return KAATCP_ERR_BAD_PARAM;
     }
     if (message->connect_flags != KAA_CONNECT_FLAGS) {
@@ -653,9 +659,19 @@ kaatcp_error_t kaatcp_fill_connect_message(uint16_t keepalive, uint32_t next_pro
     if (keepalive != KAA_TCP_CHANNEL_MAX_TIMEOUT) {
         return KAATCP_ERR_BAD_PARAM;
     }
-    if (next_protocol_id != 0x3553c66f) {
+    if (next_protocol_id != 0x0231ad61) {
         return KAATCP_ERR_BAD_PARAM;
     }
+
+#ifdef KAA_ENCRYPTION
+    /* If enctyption is enabled, wee ougth to decrypt
+     * payload first and supply the rigth payload size
+     * for parsing.
+     */
+    kaa_error_t err = ext_decrypt_data((uint8_t *)sync_request, sync_request_size,
+                                       (uint8_t *)sync_request, &sync_request_size);
+    ASSERT_EQUAL(err, KAA_ERR_NONE);
+#endif
     if (sync_request && sync_request_size == sizeof(CONNECT_PACK)) {
         if (!memcmp(CONNECT_PACK, sync_request, sync_request_size)) {
             memset(message, 0, sizeof(kaatcp_connect_t));
@@ -715,10 +731,13 @@ kaa_error_t kaa_platform_protocol_alloc_serialize_client_sync(kaa_platform_proto
 
 ext_tcp_socket_state_t ext_tcp_utils_tcp_socket_check(kaa_fd_t fd, const kaa_sockaddr_t *destination, kaa_socklen_t destination_size)
 {
+    /* Only to avoid compiler's warning */
+    (void)destination_size;
 
     if (fd == ACCESS_POINT_SOCKET_FD) {
-        unsigned char *dst = (unsigned char*)destination;
-        if(!memcmp(dst,DESTINATION_SOCKADDR,destination_size)) {
+        int result_memcmp = memcmp(destination->sa_data, DESTINATION_SOCKADDR.sa_data,
+                sizeof(DESTINATION_SOCKADDR.sa_data));
+        if ((result_memcmp == 0) && (destination->sa_family == DESTINATION_SOCKADDR.sa_family)) {
             if (access_point_test_info.socket_connecting_error_scenario) {
                 return KAA_TCP_SOCK_ERROR;
             } else {
@@ -726,6 +745,7 @@ ext_tcp_socket_state_t ext_tcp_utils_tcp_socket_check(kaa_fd_t fd, const kaa_soc
             }
         }
     }
+
     return KAA_TCP_SOCK_CONNECTED;
 }
 
@@ -781,11 +801,13 @@ ext_tcp_utils_function_return_state_t ext_tcp_utils_getaddrbyhost(kaa_dns_resolv
 
 kaa_error_t ext_tcp_utils_open_tcp_socket(kaa_fd_t *fd, const kaa_sockaddr_t *destination, kaa_socklen_t destination_size)
 {
+    int result_memcmp;
+
     KAA_RETURN_IF_NIL3(fd, destination, destination_size, KAA_ERR_BADPARAM);
 
-    unsigned char *dst = (unsigned char*)destination;
-
-    if(!memcmp(dst,DESTINATION_SOCKADDR,destination_size)) {
+    result_memcmp = memcmp(destination->sa_data, DESTINATION_SOCKADDR.sa_data,
+            sizeof(DESTINATION_SOCKADDR.sa_data));
+    if ((result_memcmp == 0) && (destination->sa_family == DESTINATION_SOCKADDR.sa_family)) {
         access_point_test_info.new_socket_created = true;
         *fd = ACCESS_POINT_SOCKET_FD;
         return KAA_ERR_NONE;

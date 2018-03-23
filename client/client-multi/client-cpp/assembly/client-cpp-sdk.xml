@@ -44,11 +44,13 @@
             <outputDirectory>toolchains</outputDirectory>
         </fileSet>
         <fileSet>
+            <directory>${project.basedir}/docs</directory>
+            <outputDirectory>docs</outputDirectory>
+        </fileSet>
+        <fileSet>
             <directory>${project.basedir}</directory>
             <outputDirectory>/</outputDirectory>
             <includes>
-                <include>avrogen.bat</include>
-                <include>avrogen.sh</include>
                 <include>CMakeLists.txt</include>
                 <include>README</include>
             </includes>
